@@ -1,4 +1,5 @@
 from lxml import etree as ET
+from typing import Union
 
 class Camt053Parser:
     """
@@ -28,7 +29,7 @@ class Camt053Parser:
         Extracts statement information like IBAN and balances from the CAMT.053 file.
     """
 
-    def __init__(self, xml_data: str | bytes):
+    def __init__(self, xml_data: Union[str, bytes]):
         """
         Initializes the Camt053Parser with XML data.
 
