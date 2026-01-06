@@ -85,6 +85,22 @@ class Camt053Parser:
                 return version
         return "unknown"
 
+    def _find_statements_or_reports(self):
+        """
+        Finds the 'Stmt' or 'Rpt' elements in the XML content.
+
+        Returns
+        -------
+        elements : list[Element]
+            The detected CAMT.053 'Stmt' or 'Rpt' elements.
+        """
+        stmts = self.tree.findall(".//Stmt", self.namespaces)
+        if len(stmts) != 0:
+            return stmts
+
+        # Maybe we have a Rpt file
+        return self.tree.findall(".//Rpt", self.namespaces)
+
     def get_group_header(self):
         """
         Extracts the group header information from the CAMT.053 file.
@@ -127,9 +143,8 @@ class Camt053Parser:
             A list of dictionaries, each representing a transaction with its associated data.
         """
         transactions = []
-        statements = self.tree.findall(".//Stmt", self.namespaces)
 
-        for statement in statements:
+        for statement in self._find_statements_or_reports():
             entries = statement.findall(".//Ntry", self.namespaces)
             for entry in entries:
                 transactions.extend(self._extract_transaction(entry, statement))
@@ -345,12 +360,8 @@ class Camt053Parser:
             - Currency: Account currency (if available)
         """
         statements = []
-        stmts = self.tree.findall(".//Stmt", self.namespaces)
-        if len(stmts) == 0:
-            # Maybe we have a Rpt file
-            stmts = self.tree.findall(".//Rpt", self.namespaces)
 
-        for stmt in stmts:
+        for stmt in self._find_statements_or_reports():
             # Extract IBAN
             iban = stmt.find(".//Acct//Id//IBAN", self.namespaces)
             iban_text = iban.text if iban is not None else None
