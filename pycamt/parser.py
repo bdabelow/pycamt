@@ -4,6 +4,10 @@ from pathlib import Path
 from lxml import etree as ET
 
 
+class Camt053ParseError(Exception):
+    pass
+
+
 class Camt053Parser:
     """
     A parser class for camt.053 XML files, designed to be flexible and extensible for different CAMT.053 versions.
@@ -94,12 +98,12 @@ class Camt053Parser:
         elements : list[Element]
             The detected CAMT.053 'Stmt' or 'Rpt' elements.
         """
-        stmts = self.tree.findall(".//Stmt", self.namespaces)
-        if len(stmts) != 0:
-            return stmts
+        for xmlpath in (".//Stmt", ".//Rpt"):
+            stmts = self.tree.findall(xmlpath, self.namespaces)
+            if len(stmts) != 0:
+                return stmts
 
-        # Maybe we have a Rpt file
-        return self.tree.findall(".//Rpt", self.namespaces)
+        raise Camt053ParseError("Neither 'Stmt' nor 'Rpt' element found")
 
     def get_group_header(self):
         """
