@@ -3,60 +3,121 @@ import pytest
 from pycamt.parser import Camt053Parser
 
 
+XML_DATA_STMT = """
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
+    <BkToCstmrStmt>
+        <GrpHdr>
+            <MsgId>ABC123</MsgId>
+            <CreDtTm>2020-06-23T18:56:25.64Z</CreDtTm>
+        </GrpHdr>
+        <Stmt>
+            <Acct>
+                <Id>
+                    <IBAN>GB33BUKB20201555555555</IBAN>
+                </Id>
+            </Acct>
+            <Bal>
+                <Tp>
+                    <CdOrPrtry>
+                        <Cd>OPBD</Cd>
+                    </CdOrPrtry>
+                </Tp>
+                <Dt>
+                    <Dt>2025-07-31</Dt>
+                </Dt>
+                <Amt Ccy="EUR">1000.00</Amt>
+            </Bal>
+            <Ntry>
+                <Amt Ccy="EUR">500.00</Amt>
+                <CdtDbtInd>CRDT</CdtDbtInd>
+                <BookgDt>
+                    <Dt>2020-06-23</Dt>
+                </BookgDt>
+                <ValDt>
+                    <Dt>2020-06-23</Dt>
+                </ValDt>
+                <AcctSvcrRef>123</AcctSvcrRef>
+                <NtryDtls>
+                    <TxDtls>
+                        <Refs>
+                            <EndToEndId>ENDTOENDID123</EndToEndId>
+                        </Refs>
+                        <AmtDtls>
+                            <TxAmt>
+                                <Amt Ccy="EUR">500.00</Amt>
+                            </TxAmt>
+                        </AmtDtls>
+                    </TxDtls>
+                </NtryDtls>
+            </Ntry>
+        </Stmt>
+    </BkToCstmrStmt>
+</Document>
+"""
+
+XML_DATA_RPT = """
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.08" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:iso:std:iso:20022:tech:xsd:camt.052.001.08 camt.052.001.08.xsd">
+    <BkToCstmrAcctRpt>
+        <GrpHdr>
+            <MsgId>ABC123</MsgId>
+            <CreDtTm>2020-06-23T18:56:25.64Z</CreDtTm>
+        </GrpHdr>
+        <Rpt>
+            <Acct>
+                <Id>
+                    <IBAN>GB33BUKB20201555555555</IBAN>
+                </Id>
+            </Acct>
+            <Bal>
+                <Tp>
+                    <CdOrPrtry>
+                        <Cd>OPBD</Cd>
+                    </CdOrPrtry>
+                </Tp>
+                <Dt>
+                    <Dt>2025-07-31</Dt>
+                </Dt>
+                <Amt Ccy="EUR">1000.00</Amt>
+            </Bal>
+            <Ntry>
+                <Amt Ccy="EUR">500.00</Amt>
+                <CdtDbtInd>CRDT</CdtDbtInd>
+                <Sts>
+                    <Cd>BOOK</Cd>
+                </Sts>
+                <BookgDt>
+                    <Dt>2020-06-23</Dt>
+                </BookgDt>
+                <ValDt>
+                    <Dt>2020-06-23</Dt>
+                </ValDt>
+                <AcctSvcrRef>123</AcctSvcrRef>
+                <NtryDtls>
+                    <TxDtls>
+                        <Refs>
+                            <EndToEndId>ENDTOENDID123</EndToEndId>
+                        </Refs>
+                        <Amt Ccy="EUR">500.00</Amt>
+                    </TxDtls>
+                </NtryDtls>
+            </Ntry>
+        </Rpt>
+    </BkToCstmrAcctRpt>
+</Document>
+"""
+
+def pytest_generate_tests(metafunc):
+    if "parser" in metafunc.fixturenames:
+        metafunc.parametrize("parser", ["parser_stmt", "parser_rpt"], indirect=True)
+
+
 @pytest.fixture
-def parser():
-    xml_data = """
-    <Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02">
-        <BkToCstmrStmt>
-            <GrpHdr>
-                <MsgId>ABC123</MsgId>
-                <CreDtTm>2020-06-23T18:56:25.64Z</CreDtTm>
-            </GrpHdr>
-            <Stmt>
-                <Acct>
-                    <Id>
-                        <IBAN>GB33BUKB20201555555555</IBAN>
-                    </Id>
-                </Acct>
-                <Bal>
-                    <Tp>
-                        <CdOrPrtry>
-                            <Cd>OPBD</Cd>
-                        </CdOrPrtry>
-                    </Tp>
-                    <Dt>
-                        <Dt>2025-07-31</Dt>
-                    </Dt>
-                    <Amt Ccy="EUR">1000.00</Amt>
-                </Bal>
-                <Ntry>
-                    <Amt Ccy="EUR">500.00</Amt>
-                    <CdtDbtInd>CRDT</CdtDbtInd>
-                    <BookgDt>
-                        <Dt>2020-06-23</Dt>
-                    </BookgDt>
-                    <ValDt>
-                        <Dt>2020-06-23</Dt>
-                    </ValDt>
-                    <AcctSvcrRef>123</AcctSvcrRef>
-                    <NtryDtls>
-                        <TxDtls>
-                            <Refs>
-                                <EndToEndId>ENDTOENDID123</EndToEndId>
-                            </Refs>
-                            <AmtDtls>
-                                <TxAmt>
-                                    <Amt Ccy="EUR">500.00</Amt>
-                                </TxAmt>
-                            </AmtDtls>
-                        </TxDtls>
-                    </NtryDtls>
-                </Ntry>
-            </Stmt>
-        </BkToCstmrStmt>
-    </Document>
-    """
-    return Camt053Parser(xml_data)
+def parser(request):
+    if request.param == "parser_stmt":
+        return Camt053Parser(XML_DATA_STMT)
+    if request.param == "parser_rpt":
+        return Camt053Parser(XML_DATA_RPT)
+    raise ValueError("invalid internal test config")
 
 
 class TestCamt053Parser:
