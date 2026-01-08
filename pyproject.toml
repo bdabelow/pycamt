@@ -6,7 +6,7 @@ authors = [
   { name = "Olivier D'Ancona", email = "folivier_dancona@hotmail.com" },
 ]
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.9,<4.0"
 license = { text = "MIT" }
 dependencies = ["lxml>=6.0.2"]
 
