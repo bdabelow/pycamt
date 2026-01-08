@@ -1,5 +1,13 @@
+import contextlib
+from pathlib import Path
+
 from lxml import etree as ET
 from typing import Union
+
+
+class Camt053ParseError(Exception):
+    pass
+
 
 class Camt053Parser:
     """
@@ -38,12 +46,13 @@ class Camt053Parser:
         xml_data : str
             XML data as a string representation of CAMT.053 content.
         """
-        self.tree = ET.fromstring(xml_data)
+        parser = ET.XMLParser(resolve_entities=False, no_network=True)
+        self.tree = ET.fromstring(xml_data, parser=parser)
         self.namespaces = self.tree.nsmap
         self.version = self._detect_version()
 
     @classmethod
-    def from_file(cls, file_path):
+    def from_file(cls, file_path: str | Path):
         """
         Creates an instance of Camt053Parser from a CAMT.053 XML file.
 
@@ -57,9 +66,8 @@ class Camt053Parser:
         Camt053Parser
             An instance of the parser initialized with the XML content from the file.
         """
-        with open(file_path, 'rb') as file:
-            xml_data = file.read()
-        return cls(xml_data)
+        with open(file_path, "rb") as file:
+            return cls(file.read())
 
     def _detect_version(self):
         """
@@ -81,6 +89,22 @@ class Camt053Parser:
             if version in root.tag:
                 return version
         return "unknown"
+
+    def _find_statements_or_reports(self):
+        """
+        Finds the 'Stmt' or 'Rpt' elements in the XML content.
+
+        Returns
+        -------
+        elements : list[Element]
+            The detected CAMT.053 'Stmt' or 'Rpt' elements.
+        """
+        for xmlpath in (".//Stmt", ".//Rpt"):
+            stmts = self.tree.findall(xmlpath, self.namespaces)
+            if len(stmts) != 0:
+                return stmts
+
+        raise Camt053ParseError("Neither 'Stmt' nor 'Rpt' element found")
 
     def get_group_header(self):
         """
@@ -124,9 +148,8 @@ class Camt053Parser:
             A list of dictionaries, each representing a transaction with its associated data.
         """
         transactions = []
-        statements = self.tree.findall(".//Stmt", self.namespaces)
 
-        for statement in statements:
+        for statement in self._find_statements_or_reports():
             entries = statement.findall(".//Ntry", self.namespaces)
             for entry in entries:
                 transactions.extend(self._extract_transaction(entry, statement))
@@ -159,36 +182,30 @@ class Camt053Parser:
         else:
             for ntry_detail in entry_details:
                 tx_details = ntry_detail.findall(".//TxDtls", self.namespaces)
-
+                if len(tx_details) == 0:
+                    # No TxDtls in NtryDtls
+                    transactions.append(common_data)
                 # Handle 1-1 relationship
-                if len(tx_details) == 1:
-                    transactions.append(
-                        {
-                            **common_data,
-                            **self._extract_transaction_details(tx_details[0]),
-                        }
-                    )
+                elif len(tx_details) == 1:
+                    transactions.append({
+                        **common_data,
+                        **self._extract_transaction_details(tx_details[0]),
+                    })
 
                 # Handle 1-n relationship
                 else:
                     for tx_detail in tx_details:
-                        transactions.append(
-                            {
-                                **common_data,
-                                **self._extract_transaction_details(tx_detail),
-                            }
-                        )
+                        transactions.append({
+                            **common_data,
+                            **self._extract_transaction_details(tx_detail),
+                        })
         return transactions
 
     def _parse_status(self, entry):
         status = None
         if entry is not None:
             child_element = entry.find(".//Cd", self.namespaces)
-
-            if child_element is not None:
-                status = child_element.text
-            else:
-                status = entry.text
+            status = child_element.text if child_element is not None else entry.text
 
         return status
 
@@ -259,6 +276,9 @@ class Camt053Parser:
         -------
         dict
             Detailed information extracted from the transaction detail element.
+            Includes RemittanceInformation (first Ustrd) and RemittanceInformationFull
+            (all Ustrd elements joined with spaces) for backward compatibility and
+            comprehensive remittance data capture.
         """
 
         data = {
@@ -307,6 +327,13 @@ class Camt053Parser:
                 if tx_detail.find(".//RmtInf//Ustrd", self.namespaces) is not None
                 else None
             ),
+            "RemittanceInformationFull": (
+                " ".join(
+                    rinfo.text.strip() for rinfo in tx_detail.findall(".//RmtInf//Ustrd", self.namespaces) if rinfo.text
+                )
+                if tx_detail.findall(".//RmtInf//Ustrd", self.namespaces)
+                else None
+            ),
         }
 
         structured_remittance_elem = tx_detail.find(".//RmtInf//Strd", self.namespaces)
@@ -316,40 +343,38 @@ class Camt053Parser:
             additional_ref_elem = structured_remittance_elem.find(".//AddtlRmtInf", self.namespaces)
 
             data["RemittanceInformation"] = ref_elem.text if ref_elem is not None else None
-            data["AdditionalRemittanceInformation"] = additional_ref_elem.text if additional_ref_elem is not None else None
+            data["AdditionalRemittanceInformation"] = (
+                additional_ref_elem.text if additional_ref_elem is not None else None
+            )
 
         return {key: value for key, value in data.items() if value is not None}
 
     def get_statement_info(self):
         """
         Extracts basic statement information like IBAN, opening, and closing balance.
-    
+
         Returns
         -------
         dict
             A dictionary containing statement information including:
             - IBAN: The account IBAN
             - OpeningBalance: The opening balance amount
-            - ClosingBalance: The closing balance amount  
+            - ClosingBalance: The closing balance amount
             - OpeningBalanceDate: Date of the opening balance
             - ClosingBalanceDate: Date of the closing balance
             - Currency: Account currency (if available)
         """
         statements = []
-        stmts = self.tree.findall(".//Stmt", self.namespaces)
-        if len(stmts) == 0:
-            # Maybe we have a Rpt file
-            stmts = self.tree.findall(".//Rpt", self.namespaces)
 
-        for stmt in stmts:
+        for stmt in self._find_statements_or_reports():
             # Extract IBAN
             iban = stmt.find(".//Acct//Id//IBAN", self.namespaces)
             iban_text = iban.text if iban is not None else None
-            
+
             # Extract currency
             currency = stmt.find(".//Acct//Ccy", self.namespaces)
             currency_text = currency.text if currency is not None else None
-            
+
             # Initialize result dictionary
             result = {
                 "IBAN": iban_text,
@@ -357,32 +382,30 @@ class Camt053Parser:
                 "OpeningBalance": None,
                 "ClosingBalance": None,
                 "OpeningBalanceDate": None,
-                "ClosingBalanceDate": None
+                "ClosingBalanceDate": None,
             }
-            
+
             # Extract all balance elements
             balance_elements = stmt.findall(".//Bal", self.namespaces)
-            
+
             for balance_elem in balance_elements:
                 # Extract balance type (OPBD or CLBD)
                 balance_type_elem = balance_elem.find(".//Tp//CdOrPrtry//Cd", self.namespaces)
                 balance_type = balance_type_elem.text if balance_type_elem is not None else None
-                
+
                 # Extract amount
                 amount_elem = balance_elem.find(".//Amt", self.namespaces)
                 amount_text = amount_elem.text if amount_elem is not None else None
-                
+
                 # Extract credit/debit indicator
                 cdt_dbt_elem = balance_elem.find(".//CdtDbtInd", self.namespaces)
                 cdt_dbt_indicator = cdt_dbt_elem.text if cdt_dbt_elem is not None else None
-                
+
                 # Apply sign based on credit/debit indicator
                 if amount_text and cdt_dbt_indicator == "DBIT":
-                    try:
+                    with contextlib.suppress(ValueError):
                         amount_text = str(-float(amount_text))
-                    except ValueError:
-                        pass  # Keep original if conversion fails
-                
+
                 # Extract date
                 date_elem = balance_elem.find(".//Dt//Dt", self.namespaces)
                 date_text = date_elem.text if date_elem is not None else None
@@ -398,7 +421,7 @@ class Camt053Parser:
                 elif balance_type == "CLBD":
                     result["ClosingBalance"] = amount_text
                     result["ClosingBalanceDate"] = date_text
-            
+
             statements.append(result)
-        
+
         return statements

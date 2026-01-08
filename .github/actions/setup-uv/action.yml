@@ -1,0 +1,28 @@
+name: "setup-uv"
+description: "Composite action to setup the Python and uv environment."
+
+inputs:
+  python-version:
+    required: false
+    description: "The python version to use"
+    default: "3.14"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install uv and set python version
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Load cached venv
+      id: cached-uv-dependencies
+      uses: actions/cache@v5
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('uv.lock') }}
+
+    - name: Install dependencies
+      if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
+      run: uv sync --all-extras --all-groups
+      shell: bash
