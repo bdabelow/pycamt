@@ -52,7 +52,7 @@ class Camt053Parser:
         self.version = self._detect_version()
 
     @classmethod
-    def from_file(cls, file_path: str | Path):
+    def from_file(cls, file_path: Union[str, Path]):
         """
         Creates an instance of Camt053Parser from a CAMT.053 XML file.
 
